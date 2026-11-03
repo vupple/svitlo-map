@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Світлокарта будинків</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  /* Layout: full-screen map + one collapsible sidebar on the left (bottom sheet on phones) */
+  :root {
+    --bg: #0d0f12;
+    --surface: #121418;
+    --raise: #1a1d22;
+    --line: #23262c;
+    --fg: #e7e9ec;
+    --muted: #8b919b;
+    --on: #3ddc84;
+    --off: #ff4d4f;
+    --idle: #5f6670;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); overflow: hidden; }
+  #map { position: absolute; inset: 0; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid #5b6472; outline-offset: 1px; }
+
+  .side {
+    position: absolute; z-index: 5; top: 0; bottom: 0; left: 0;
+    width: 320px; box-sizing: border-box; overflow-y: auto;
+    background: var(--surface); border-right: 1px solid var(--line);
+    padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .head { display: flex; align-items: flex-start; gap: 8px; }
+  .head > div { flex: 1; min-width: 0; }
+  h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .btn { all: unset; cursor: pointer; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--muted); font-size: 15px; }
+  .btn:hover { background: var(--raise); color: var(--fg); }
+
+  .field { width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border-radius: 6px; background: var(--raise); border: 1px solid transparent; }
+  .field:focus { border-color: #3a3f47; outline: none; }
+  .search { position: relative; }
+  .results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 6; margin: 0; padding: 4px; list-style: none;
+    background: var(--raise); border: 1px solid var(--line); border-radius: 6px; max-height: 280px; overflow-y: auto; }
+  .results button { all: unset; box-sizing: border-box; display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+  .results button:hover, .results button:focus-visible { background: #23272e; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+  .dot.on { background: var(--on); } .dot.off { background: var(--off); } .dot.idle { background: var(--idle); }
+
+  .summary { display: grid; gap: 10px; }
+  .headline { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .headline small { font-size: 14px; font-weight: 400; color: var(--muted); }
+  .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--raise); }
+  .bar span { height: 100%; }
+  .b-on { background: var(--on); } .b-off { background: var(--off); } .b-idle { background: var(--idle); }
+  .facts { margin: 0; display: grid; gap: 4px; }
+  .facts div { display: flex; justify-content: space-between; gap: 12px; }
+  .facts dt { color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+  .list { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+  h2 { margin: 0; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+  h2 span { font-weight: 400; color: var(--muted); }
+  .rows { list-style: none; margin: 0 -8px; padding: 0; }
+  .rows button { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; gap: 5px; padding: 7px 8px; border-radius: 6px; }
+  .rows button:hover, .rows button[aria-current="true"] { background: var(--raise); }
+  .row-top { display: flex; justify-content: space-between; gap: 8px; }
+  .row-top .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-top .p { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rows .bar { height: 4px; }
+  .credit { margin: 0; font-size: 12px; color: var(--muted); }
+  .credit a, .sub a { color: var(--fg); text-decoration: underline; text-decoration-color: #4a4f58; text-underline-offset: 2px; }
+  .credit a:hover, .sub a:hover { text-decoration-color: currentColor; }
+  .empty { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .show { position: absolute; z-index: 5; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
+    width: 36px; height: 36px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); }
+
+  .maplibregl-popup-content { background: var(--raise); color: var(--fg); border-radius: 8px; padding: 10px 12px; font: 13px/1.45 var(--font); box-shadow: 0 6px 20px rgba(0,0,0,.45); }
+  .maplibregl-popup-tip { border-top-color: var(--raise) !important; border-bottom-color: var(--raise) !important; }
+  .maplibregl-popup-close-button { color: var(--muted); font-size: 16px; }
+  .pop-title { font-weight: 600; margin: 0 14px 4px 0; }
+  .pop-state { display: flex; align-items: center; gap: 6px; }
+  .pop-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .pop a { color: #8ab4f8; }
+  .maplibregl-ctrl-group { background: var(--surface); border: 1px solid var(--line); box-shadow: none !important; }
+  .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+  .maplibregl-ctrl-icon { filter: invert(1) brightness(.85); }
+  .maplibregl-ctrl-attrib { background: rgba(13,15,18,.7) !important; color: var(--muted); }
+  .maplibregl-ctrl-attrib a { color: var(--muted); }
+
+  @media (max-width: 560px) {
+    .side { top: auto; width: 100%; max-height: 65vh; border-right: 0; border-top: 1px solid var(--line); border-radius: 12px 12px 0 0;
+      padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    .show { top: auto; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<button class="btn show" id="side-open" type="button" aria-label="Показати панель" hidden>☰</button>
+<aside class="side" id="side" aria-label="Світлокарта">
+  <header class="head">
+    <div>
+      <h1>Світлокарта</h1>
+      <p class="sub">Дані <a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобота</a> · <span id="updated">Завантаження…</span></p>
+    </div>
+    <button class="btn" id="refresh" type="button" aria-label="Оновити дані" title="Оновити">↻</button>
+    <button class="btn" id="side-close" type="button" aria-label="Сховати панель" title="Сховати">✕</button>
+  </header>
+
+  <div class="search">
+    <input class="field" id="q" type="search" placeholder="Пошук адреси" autocomplete="off" aria-label="Пошук адреси чи бота">
+    <ul class="results" id="results" hidden></ul>
+  </div>
+
+  <select class="field" id="area" aria-label="Місто"></select>
+
+  <section class="summary" aria-live="polite">
+    <p class="headline"><span id="a-off">—</span> <small>без світла</small></p>
+    <div class="bar" id="a-bar"></div>
+    <dl class="facts">
+      <div><dt><span class="dot on"></span>Світло є</dt><dd id="a-on-n">—</dd></div>
+      <div><dt><span class="dot off"></span>Світла немає</dt><dd id="a-off-n">—</dd></div>
+      <div><dt><span class="dot idle"></span>Немає даних</dt><dd id="a-idle-n">—</dd></div>
+      <div><dt>Медіана відключення</dt><dd id="a-median">—</dd></div>
+      <div><dt>Найдовше відключення</dt><dd id="a-max">—</dd></div>
+    </dl>
+  </section>
+
+  <p class="credit">Дані про світло — <a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобот</a>: сервіс, що стежить за електрикою в будинках і сповіщає про відключення в Telegram. Карта: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</p>
+
+  <section class="list">
+    <h2 id="list-title">Райони</h2>
+    <ul class="rows" id="rows"></ul>
+  </section>
+</aside>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<!-- optional: building outlines prepared by build_buildings.py -->
+<script src="buildings.js"></script>
+<script>
+const API = "https://api.svitlobot.in.ua/website/getChannelsForMap";
+const STYLE = "https://tiles.openfreemap.org/styles/dark";
+const BUILDING_ZOOM = 13;       // OpenMapTiles has building polygons from z13
+const SNAP_METERS = 25;         // bot point outside any polygon: snap to nearest building within this radius
+const REFRESH_MS = 60_000;
+
+const COLORS = { on: "#3ddc84", off: "#ff4d4f", idle: "#6b7380" };
+const stateOf = s => s === 1 ? "on" : s === 2 ? "off" : "idle";
+
+let bots = [];                  // one entry per map point (a channel can have several connected points)
+const matches = new Map();      // bot key -> { geom, dist }
+const PRE = window.SVITLO_PRECOMPUTED || { houses: {}, districts: [] };
+const coordKey = bot => `${+bot.lat.toFixed(6)},${+bot.lng.toFixed(6)}`;
+
+// Outlines prepared ahead of time let houses show at every zoom, not only where tiles are loaded.
+function seedFromPrecomputed() {
+  for (const bot of bots) {
+    if (matches.has(bot.key)) continue;
+    const ring = PRE.houses[coordKey(bot)];
+    if (ring) matches.set(bot.key, { geom: { type: "Polygon", coordinates: [ring] }, dist: 0.5 });
+  }
+}
+
+// ---------- data ----------
+function parseLine(line) {
+  const p = line.split(";&&&;");
+  if (p.length !== 12) return [];
+  const status = parseInt(p[1], 10) || 0;
+  const base = {
+    status, state: stateOf(status),
+    changed: new Date(p[2].trim()),
+    title: p[3].trim(), link: p[4].trim(),
+    city: p[3].includes("->") ? p[3].split("->")[0].trim().replace(/^(м\.|місто)\s*/i, "").replace(/[,.\s]+$/, "") || "Інше" : "Інше",
+    users: parseInt(p[5], 10) || 0,
+    group: p[9].trim(),
+  };
+  const pts = [{ name: base.title, lat: parseFloat(p[6]), lng: parseFloat(p[7]) }];
+  for (const raw of p[11].trim().split(";&&;")) {
+    const q = raw.split(";&;");
+    if (q.length === 3) pts.push({ name: q[0].trim(), lat: parseFloat(q[1]), lng: parseFloat(q[2]) });
+  }
+  return pts.filter(pt => isFinite(pt.lat) && isFinite(pt.lng))
+            .map((pt, i) => ({ ...base, key: base.link + "#" + i, pointName: pt.name, lat: pt.lat, lng: pt.lng }));
+}
+
+async function loadBots() {
+  setUpdated("Завантаження…");
+  try {
+    const res = await fetch(API, { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    const text = await res.text();
+    bots = text.split("\n").flatMap(parseLine);
+    const at = res.headers.get("x-cache-updated-at") || res.headers.get("last-modified");
+    const t = at ? new Date(at) : new Date();
+    setUpdated("оновлено о " + t.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" }));
+    seedFromPrecomputed();
+    assignDistricts();
+    rematchAll();
+    renderSide();
+  } catch (e) {
+    setUpdated("Не вдалося отримати дані. Натисніть ↻");
+  }
+}
+function setUpdated(t) { document.getElementById("updated").textContent = t; }
+
+// ---------- geometry ----------
+function inRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function inPolygon(x, y, rings) { let c = false; for (const r of rings) if (inRing(x, y, r)) c = !c; return c; }
+function segDist2(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+  let t = l ? ((px - ax) * dx + (py - ay) * dy) / l : 0;
+  t = Math.max(0, Math.min(1, t));
+  const ex = ax + t * dx - px, ey = ay + t * dy - py;
+  return ex * ex + ey * ey;
+}
+// distance in metres from point to polygon boundary (local equirectangular projection)
+function distMeters(lng, lat, rings) {
+  const kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110540;
+  let best = Infinity;
+  for (const r of rings) for (let i = 1; i < r.length; i++) {
+    best = Math.min(best, segDist2(0, 0, (r[i-1][0]-lng)*kx, (r[i-1][1]-lat)*ky, (r[i][0]-lng)*kx, (r[i][1]-lat)*ky));
+  }
+  return Math.sqrt(best);
+}
+
+// Look through building polygons from loaded tiles and attach each bot to the building it sits in.
+function matchBuildings() {
+  if (!map.getSource("openmaptiles") || map.getZoom() < BUILDING_ZOOM - 0.5 || !bots.length) return;
+  const b = map.getBounds();
+  const pad = 0.01;
+  const CELL = 0.002;
+  const grid = new Map();
+  for (const bot of bots) {
+    if (bot.lng < b.getWest() - pad || bot.lng > b.getEast() + pad || bot.lat < b.getSouth() - pad || bot.lat > b.getNorth() + pad) continue;
+    const m = matches.get(bot.key);
+    if (m && m.dist === 0) continue;
+    const k = Math.floor(bot.lng / CELL) + ":" + Math.floor(bot.lat / CELL);
+    (grid.get(k) || grid.set(k, []).get(k)).push(bot);
+  }
+  if (!grid.size) return;
+
+  const feats = map.querySourceFeatures("openmaptiles", { sourceLayer: "building" });
+  const snapDeg = SNAP_METERS / 70000;
+  let changed = false;
+  for (const f of feats) {
+    const g = f.geometry;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+    for (const rings of polys) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const [x, y] of rings[0]) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      const cx0 = Math.floor((minX - snapDeg) / CELL), cx1 = Math.floor((maxX + snapDeg) / CELL);
+      const cy0 = Math.floor((minY - snapDeg) / CELL), cy1 = Math.floor((maxY + snapDeg) / CELL);
+      for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) {
+        const cell = grid.get(cx + ":" + cy);
+        if (!cell) continue;
+        for (const bot of cell) {
+          if (bot.lng < minX - snapDeg || bot.lng > maxX + snapDeg || bot.lat < minY - snapDeg || bot.lat > maxY + snapDeg) continue;
+          const prev = matches.get(bot.key);
+          if (prev && prev.dist === 0) continue;
+          let d = inPolygon(bot.lng, bot.lat, rings) ? 0 : distMeters(bot.lng, bot.lat, rings);
+          if (d <= SNAP_METERS && (!prev || d < prev.dist)) {
+            matches.set(bot.key, { geom: { type: "Polygon", coordinates: rings }, dist: d });
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  if (changed) render();
+}
+
+function rematchAll() { render(); matchBuildings(); }
+
+// ---------- rendering ----------
+function render() {
+  const houses = [], points = [];
+  for (const bot of bots) {
+    const m = matches.get(bot.key);
+    const props = { key: bot.key, state: bot.state, matched: !!m };
+    if (m) houses.push({ type: "Feature", geometry: m.geom, properties: props });
+    points.push({ type: "Feature", geometry: { type: "Point", coordinates: [bot.lng, bot.lat] }, properties: props });
+  }
+  // draw the "off" buildings last so they stay visible where neighbours overlap
+  houses.sort((a, b) => (a.properties.state === "off") - (b.properties.state === "off"));
+  map.getSource("houses")?.setData({ type: "FeatureCollection", features: houses });
+  map.getSource("bots")?.setData({ type: "FeatureCollection", features: points });
+}
+
+// ---------- popup ----------
+function duration(from) {
+  let m = Math.max(0, Math.floor((Date.now() - from) / 60000));
+  const d = Math.floor(m / 1440); m -= d * 1440;
+  const h = Math.floor(m / 60); m -= h * 60;
+  return (d ? d + " д " : "") + (d || h ? h + " год " : "") + m + " хв";
+}
+function esc(s) { return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function popupHtml(bot) {
+  let state;
+  if (bot.state === "on") {
+    const old = Date.now() - bot.changed >= (24 * 60 - 10) * 60000;
+    state = old ? "Світло є" : "Світло є вже " + duration(bot.changed);
+  } else if (bot.state === "off") state = "Світла немає вже " + duration(bot.changed);
+  else state = bot.status === 0 ? "Систему ще не запущено" : "Технічна перерва";
+  const sub = [bot.users ? bot.users + " підписників" : "", bot.group && bot.group !== "-" ? bot.group : ""].filter(Boolean).join(" · ");
+  const name = bot.pointName && bot.pointName !== bot.title ? `<div class="pop-sub">${esc(bot.pointName)}</div>` : "";
+  return `<div class="pop"><p class="pop-title">${esc(bot.title)}</p>${name}
+    <div class="pop-state"><span class="dot ${bot.state}"></span>${state}</div>
+    ${sub ? `<div class="pop-sub">${esc(sub)}</div>` : ""}
+    ${bot.link ? `<div class="pop-sub"><a href="https://t.me/${encodeURIComponent(bot.link)}" target="_blank" rel="noopener">t.me/${esc(bot.link)}</a></div>` : ""}</div>`;
+}
+
+// ---------- districts & side panel ----------
+const DISTRICTS = (PRE.districtPolys || []).map((d, i) => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const r of d.rings) for (const [x, y] of r) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  return { id: i, name: d.name, rings: d.rings, bbox: [minX, minY, maxX, maxY], city: null };
+});
+let area = null;       // selected city name, or null for all of Ukraine
+let selDistrict = null;
+try { area = localStorage.getItem("svitlo-area") ?? "Київ"; if (area === "") area = null; } catch { area = "Київ"; }
+
+// Each channel counts once, by its main point.
+const channels = () => bots.filter(b => b.key.endsWith("#0"));
+
+function assignDistricts() {
+  const votes = DISTRICTS.map(() => ({}));
+  for (const bot of channels()) {
+    bot.district = null;
+    for (const d of DISTRICTS) {
+      const [x0, y0, x1, y1] = d.bbox;
+      if (bot.lng < x0 || bot.lng > x1 || bot.lat < y0 || bot.lat > y1 || !inPolygon(bot.lng, bot.lat, d.rings)) continue;
+      bot.district = d.id;
+      votes[d.id][bot.city] = (votes[d.id][bot.city] || 0) + 1;
+      break;
+    }
+  }
+  // a district belongs to the city most of its bots name
+  DISTRICTS.forEach((d, i) => { d.city = Object.entries(votes[i]).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null; });
+}
+
+function summarize(list) {
+  const on = list.filter(b => b.state === "on").length;
+  const offList = list.filter(b => b.state === "off");
+  const off = offList.length, idle = list.length - on - off;
+  const mins = offList.map(b => (Date.now() - b.changed) / 60000).sort((a, b) => a - b);
+  return { on, off, idle, total: list.length, known: on + off,
+           median: mins.length ? mins[Math.floor(mins.length / 2)] : null, max: mins.length ? mins.at(-1) : null };
+}
+const pctOff = s => s.known ? Math.round(s.off / s.known * 100) : null;
+function fmtMin(m) {
+  if (m == null) return "—";
+  m = Math.floor(m);
+  const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60;
+  return d ? `${d} д ${h} год` : h ? `${h} год ${mm} хв` : `${mm} хв`;
+}
+function barHtml(s) {
+  if (!s.total) return "";
+  const w = n => (n / s.total * 100).toFixed(2) + "%";
+  return `<span class="b-on" style="width:${w(s.on)}"></span><span class="b-off" style="width:${w(s.off)}"></span><span class="b-idle" style="width:${w(s.idle)}"></span>`;
+}
+function rowHtml(name, s) {
+  const p = pctOff(s);
+  return `<div class="row-top"><span class="n">${esc(name)}</span><span class="p">${p ?? "—"}% · ${s.off}/${s.known}</span></div><div class="bar">${barHtml(s)}</div>`;
+}
+
+function renderSide() {
+  const all = channels();
+  const byCity = {};
+  for (const b of all) (byCity[b.city] ||= []).push(b);
+  const cities = Object.keys(byCity).filter(c => c !== "Інше").sort((a, b) => byCity[b].length - byCity[a].length);
+  if (area && !byCity[area]) area = null;
+
+  const sel = document.getElementById("area");
+  sel.innerHTML = `<option value="">Уся Україна · ${all.length}</option>` +
+    cities.map(c => `<option value="${esc(c)}">${esc(c)} · ${byCity[c].length}</option>`).join("");
+  sel.value = area ?? "";
+
+  const scopeBots = area ? byCity[area] : all;
+  const s = summarize(scopeBots);
+  const p = pctOff(s);
+  document.getElementById("a-off").textContent = p == null ? "—" : p + "%";
+  document.getElementById("a-bar").innerHTML = barHtml(s);
+  document.getElementById("a-on-n").textContent = s.on;
+  document.getElementById("a-off-n").textContent = s.off;
+  document.getElementById("a-idle-n").textContent = s.idle;
+  document.getElementById("a-median").textContent = fmtMin(s.median);
+  document.getElementById("a-max").textContent = fmtMin(s.max);
+
+  const rows = document.getElementById("rows"), title = document.getElementById("list-title");
+  rows.innerHTML = "";
+  let items;
+  if (area) {
+    title.innerHTML = "Райони <span>без світла</span>";
+    items = DISTRICTS.filter(d => d.city === area)
+      .map(d => ({ name: d.name, s: summarize(scopeBots.filter(b => b.district === d.id)), district: d }));
+    items.sort((a, b) => (pctOff(b.s) ?? -1) - (pctOff(a.s) ?? -1));
+    const outside = scopeBots.filter(b => b.district == null);
+    if (items.length && outside.length) items.push({ name: "Поза межами районів", s: summarize(outside), bots: outside });
+  } else {
+    title.innerHTML = "Міста <span>без світла</span>";
+    items = cities.slice(0, 40).map(c => ({ name: c, s: summarize(byCity[c]), city: c }));
+  }
+  if (!items.length) rows.innerHTML = `<li><p class="empty">Для цього міста немає меж районів в OpenStreetMap.</p></li>`;
+  for (const it of items) {
+    const li = document.createElement("li"), btn = document.createElement("button");
+    btn.type = "button";
+    btn.innerHTML = rowHtml(it.name, it.s);
+    if (it.district) btn.setAttribute("aria-current", String(selDistrict === it.district.id));
+    btn.onclick = () => {
+      if (it.city) { setArea(it.city); return; }
+      if (it.district) { selectDistrict(it.district); renderSide(); return; }
+      fitBots(it.bots);
+    };
+    li.appendChild(btn); rows.appendChild(li);
+  }
+}
+
+function fitBots(list) {
+  if (!list?.length) return;
+  // trim stray outliers so one mislocated bot doesn't zoom out to the whole country
+  const xs = list.map(b => b.lng).sort((a, b) => a - b), ys = list.map(b => b.lat).sort((a, b) => a - b);
+  const q = (a, f) => a[Math.min(a.length - 1, Math.max(0, Math.round(f * (a.length - 1))))];
+  const t = list.length > 20 ? 0.02 : 0;
+  map.fitBounds([[q(xs, t), q(ys, t)], [q(xs, 1 - t), q(ys, 1 - t)]], { padding: 60, maxZoom: 15 });
+}
+function setArea(city) {
+  area = city || null; selDistrict = null;
+  try { localStorage.setItem("svitlo-area", area ?? ""); } catch {}
+  highlightDistrict();
+  renderSide();
+  if (area) fitBots(channels().filter(b => b.city === area));
+  else map.flyTo({ center: [31.2, 48.6], zoom: 5.6 });
+}
+function selectDistrict(d) {
+  selDistrict = selDistrict === d.id ? null : d.id;
+  highlightDistrict();
+  if (selDistrict != null) map.fitBounds([[d.bbox[0], d.bbox[1]], [d.bbox[2], d.bbox[3]]], { padding: 40 });
+}
+function highlightDistrict() {
+  map.getLayer("district-sel") && map.setFilter("district-sel", ["==", ["get", "id"], selDistrict ?? -1]);
+}
+
+// ---------- map ----------
+const map = new maplibregl.Map({
+  container: "map", style: STYLE,
+  center: [30.523, 50.450], zoom: 13.5, maxZoom: 19, attributionControl: { compact: true, customAttribution: '<a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобот</a>' },
+});
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: false }), "top-right");
+
+map.on("load", () => {
+  // Calm, uniform grey for every building; colour is reserved for buildings with a bot.
+  const style = map.getStyle();
+  for (const l of style.layers) {
+    if (l.id === "building") {
+      map.setPaintProperty(l.id, "fill-color", "#23272e");
+      map.setPaintProperty(l.id, "fill-outline-color", "#2d323a");
+    }
+    if (l.type === "symbol" && l.layout && l.layout["text-field"]) {
+      map.setLayoutProperty(l.id, "text-field", ["coalesce", ["get", "name:uk"], ["get", "name"]]);
+    }
+  }
+
+  map.addSource("houses", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addSource("bots", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  const color = ["match", ["get", "state"], "on", COLORS.on, "off", COLORS.off, COLORS.idle];
+  // put coloured houses right above the grey base buildings, below roads and labels drawn after them
+  const bIdx = style.layers.findIndex(l => l.id === "building");
+  const firstLabel = style.layers[bIdx + 1]?.id;
+
+  map.addLayer({ id: "houses-fill", type: "fill", source: "houses",
+    paint: { "fill-color": color, "fill-opacity": ["match", ["get", "state"], "idle", 0.45, 0.82] } }, firstLabel);
+  map.addLayer({ id: "houses-line", type: "line", source: "houses",
+    paint: { "line-color": color, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.6, 12, 1.2, 14, 0.6, 17, 2] } }, firstLabel);
+
+  // A dot appears only for a bot whose building is unknown, and only up close.
+  map.addLayer({ id: "bots-near", type: "circle", source: "bots", minzoom: 15,
+    filter: ["!", ["get", "matched"]],
+    paint: { "circle-color": color, "circle-radius": 5, "circle-stroke-color": "#0b0d10", "circle-stroke-width": 1.5 } });
+
+  for (const id of ["houses-fill", "bots-near"]) {
+    map.on("click", id, e => {
+      const key = e.features[0].properties.key;
+      const bot = bots.find(b => b.key === key);
+      if (bot) new maplibregl.Popup({ maxWidth: "280px" }).setLngLat(e.lngLat).setHTML(popupHtml(bot)).addTo(map);
+    });
+    map.on("mouseenter", id, () => map.getCanvas().style.cursor = "pointer");
+    map.on("mouseleave", id, () => map.getCanvas().style.cursor = "");
+  }
+
+  // City district outlines, prepared by build_buildings.py so they stay visible at every zoom
+  map.addSource("district-lines", { type: "geojson", data: { type: "Feature", properties: {},
+    geometry: { type: "MultiLineString", coordinates: PRE.districtLines || [] } } });
+  map.addLayer({ id: "districts-line", type: "line", source: "district-lines",
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": "#ffffff", "line-opacity": ["interpolate", ["linear"], ["zoom"], 6, 0.5, 12, 0.7],
+             "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.6, 10, 1, 14, 2] } });
+  map.addSource("district-polys", { type: "geojson", data: { type: "FeatureCollection",
+    features: DISTRICTS.map(d => ({ type: "Feature", properties: { id: d.id }, geometry: { type: "Polygon", coordinates: d.rings } })) } });
+  map.addLayer({ id: "district-sel", type: "line", source: "district-polys", filter: ["==", ["get", "id"], -1],
+    paint: { "line-color": "#ffffff", "line-width": 3.5, "line-blur": 0.5 } });
+  const labelFont = style.layers.find(l => l.type === "symbol" && l.layout?.["text-font"])?.layout["text-font"] || ["Noto Sans Regular"];
+  map.addSource("district-labels", { type: "geojson", data: { type: "FeatureCollection",
+    features: PRE.districts.map(d => ({ type: "Feature", geometry: { type: "Point", coordinates: [d.lng, d.lat] }, properties: { name: d.name } })) } });
+  map.addLayer({ id: "districts-label", type: "symbol", source: "district-labels", minzoom: 9, maxzoom: 15,
+    layout: { "text-field": ["get", "name"], "text-font": labelFont, "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 14, 13],
+              "text-max-width": 8 },
+    paint: { "text-color": "#ffffff", "text-opacity": 0.6, "text-halo-color": "#0b0d10", "text-halo-width": 1.5 } });
+
+  loadBots();
+  setInterval(loadBots, REFRESH_MS);
+});
+
+let idleTimer;
+map.on("idle", () => { clearTimeout(idleTimer); idleTimer = setTimeout(matchBuildings, 50); });
+
+// ---------- UI ----------
+document.getElementById("area").onchange = e => setArea(e.target.value);
+function setSide(open) {
+  document.getElementById("side").hidden = !open;
+  document.getElementById("side-open").hidden = open;
+  try { localStorage.setItem("svitlo-side", open ? "1" : "0"); } catch {}
+}
+document.getElementById("side-close").onclick = () => setSide(false);
+document.getElementById("side-open").onclick = () => setSide(true);
+{
+  let open = !matchMedia("(max-width: 560px)").matches;
+  try { const v = localStorage.getItem("svitlo-side"); if (v) open = v === "1"; } catch {}
+  setSide(open);
+}
+document.getElementById("refresh").onclick = loadBots;
+
+const q = document.getElementById("q"), results = document.getElementById("results");
+q.addEventListener("input", () => {
+  const s = q.value.trim().toLowerCase();
+  results.innerHTML = "";
+  if (s.length < 2) { results.hidden = true; return; }
+  const seen = new Set();
+  const found = bots.filter(b => {
+    if (seen.has(b.link)) return false;
+    const hit = b.title.toLowerCase().includes(s) || b.link.toLowerCase().includes(s);
+    if (hit) seen.add(b.link);
+    return hit;
+  }).slice(0, 12);
+  for (const bot of found) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.innerHTML = `<span class="dot ${bot.state}"></span><span>${esc(bot.title)}</span>`;
+    btn.onclick = () => {
+      results.hidden = true; q.value = bot.title;
+      map.flyTo({ center: [bot.lng, bot.lat], zoom: 17 });
+      map.once("moveend", () => new maplibregl.Popup({ maxWidth: "280px" }).setLngLat([bot.lng, bot.lat]).setHTML(popupHtml(bot)).addTo(map));
+    };
+    li.appendChild(btn); results.appendChild(li);
+  }
+  results.hidden = !found.length;
+});
+document.addEventListener("click", e => { if (!e.target.closest(".search")) results.hidden = true; });
+</script>
+</body>
+</html>
