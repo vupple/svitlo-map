@@ -116,7 +116,11 @@
   .facts div { display: flex; justify-content: space-between; gap: 12px; }
   .facts dt { color: var(--muted); display: flex; align-items: center; gap: 8px; }
   .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
-  .facts .pct { color: var(--muted); }
+  .facts .cnt-n, .pie-row .cnt-n { color: var(--muted); }
+  .facts > div:nth-child(4) { margin-top: 8px; }   /* the durations form their own group below the status rows */
+  /* dot, label ... count, percent: the percent sits at the right edge in a fixed width so the counts line up */
+  .facts dd, .pie-row .n { display: flex; align-items: baseline; gap: 10px; }
+  .facts .pct, .pie-row .pct { min-width: 2.8em; text-align: right; color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
 
   .list { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
   h2 { margin: 0; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
@@ -126,7 +130,8 @@
   .rows button:hover, .rows button[aria-current="true"] { background: var(--field); }
   .row-top { display: flex; justify-content: space-between; gap: 8px; }
   .row-top .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .row-top .p { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row-top .p { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row-top .cnt-n { color: var(--muted); }
   .rows .bar { height: 4px; }
   .empty { margin: 0; color: var(--muted); font-size: 13px; }
   .foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
@@ -143,6 +148,19 @@
   .maplibregl-popup-anchor-top-right .maplibregl-popup-content { transform-origin: top center; }
   .maplibregl-popup.leaving .maplibregl-popup-content { animation: pop-out .16s ease forwards; }
   .hover-pop { pointer-events: none; }
+  .maplibregl-popup { z-index: 100; }   /* above the city pies */
+
+  /* city pies at region / country scale: on, off, no data */
+  /* MapLibre positions the outer .pie with transform; only the inner disc animates, so the two never interfere */
+  .pie { cursor: pointer; transition: opacity .3s ease; }
+  .pie > span { display: block; width: 100%; height: 100%; border-radius: 50%; transition: transform .2s var(--ease);
+    box-shadow: 0 0 0 1.5px rgba(12, 12, 12, .9), 0 2px 10px rgba(0, 0, 0, .5); }
+  .pie:hover > span { transform: scale(1.12); }
+  /* !important: MapLibre sets an inline opacity on every marker */
+  .pop-item .pie-head { gap: 6px; margin: 0 0 4px; }
+  .pie-row { display: flex; align-items: center; gap: 7px; }
+  .pie-row .n { margin-left: auto; padding-left: 16px; font-variant-numeric: tabular-nums; }
+  .pies-off .pie, .pie.pie-hide { opacity: 0 !important; pointer-events: none; }
   /* card = stacked full-bleed bands, one per channel, each faintly tinted by its own status */
   .maplibregl-popup-content { padding: 0; overflow: hidden; }
   .pop { display: grid; }
@@ -240,9 +258,9 @@
   </section>
 
   <dl class="facts extra">
-    <div><dt><span class="dot on"></span>Світло є</dt><dd id="a-on-n">—</dd></div>
-    <div><dt><span class="dot off"></span>Світла немає</dt><dd id="a-off-n">—</dd></div>
-    <div><dt><span class="dot idle"></span>Немає даних</dt><dd id="a-idle-n">—</dd></div>
+    <div><dt><span class="dot on"></span>Світло є</dt><dd><span class="cnt-n" id="a-on-n">—</span><span class="pct" id="a-on-p">—</span></dd></div>
+    <div><dt><span class="dot off"></span>Світла немає</dt><dd><span class="cnt-n" id="a-off-n">—</span><span class="pct" id="a-off-p">—</span></dd></div>
+    <div><dt><span class="dot idle"></span>Немає даних</dt><dd><span class="cnt-n" id="a-idle-n">—</span><span class="pct" id="a-idle-p">—</span></dd></div>
     <div><dt>Медіана відключення</dt><dd id="a-median">—</dd></div>
     <div><dt>Найдовше відключення</dt><dd id="a-max">—</dd></div>
   </dl>
@@ -328,6 +346,7 @@ async function loadBots() {
     assignDistricts();
     rematchAll();
     renderSide();
+    renderPies();
     if (!loadBots.done) { loadBots.done = true; if (area) fitBots(channels().filter(b => b.city === area)); }
   } catch (e) {
     setUpdated("дані не отримано, спробуйте ще");
@@ -481,6 +500,7 @@ function screenDist(f, pt) {
   return best;
 }
 function pickGroup(pt, current) {
+  if (map.getZoom() < PIE_MAX_ZOOM) return null;   // houses (and their cards) only exist from city scale
   // Measured from our own data rather than rendered features: the map returns only one of several identical outlines.
   const a = map.unproject([pt.x - HIT_PX, pt.y + HIT_PX]), c = map.unproject([pt.x + HIT_PX, pt.y - HIT_PX]);
   const looseDots = map.getZoom() >= 15;
@@ -630,7 +650,7 @@ function barHtml(s) {
 }
 function rowHtml(name, s) {
   const p = pctOff(s);
-  return `<div class="row-top"><span class="n">${esc(name)}</span><span class="p">${p ?? "—"}% · ${s.off}/${s.known}</span></div><div class="bar">${barHtml(s)}</div>`;
+  return `<div class="row-top"><span class="n">${esc(name)}</span><span class="p">${p ?? "—"}%<span class="cnt-n"> · ${s.off}/${s.known}</span></span></div><div class="bar">${barHtml(s)}</div>`;
 }
 
 function renderSide() {
@@ -650,10 +670,13 @@ function renderSide() {
   document.getElementById("a-bar").innerHTML = barHtml(s);
   measureMini();
   // on/off shares match the headline (bots with a status); "no data" is a share of all bots
-  const share = (n, of) => of ? `<span class="pct">${Math.round(n / of * 100)}% · </span>${n}` : String(n);
-  document.getElementById("a-on-n").innerHTML = share(s.on, s.known);
-  document.getElementById("a-off-n").innerHTML = share(s.off, s.known);
-  document.getElementById("a-idle-n").innerHTML = share(s.idle, s.total);
+  const share = (id, n, of) => {
+    document.getElementById(id + "-p").textContent = of ? Math.round(n / of * 100) + "%" : "—";
+    document.getElementById(id + "-n").textContent = n;
+  };
+  share("a-on", s.on, s.known);
+  share("a-off", s.off, s.known);
+  share("a-idle", s.idle, s.total);
   document.getElementById("a-median").textContent = fmtMin(s.median);
   document.getElementById("a-max").textContent = fmtMin(s.max);
 
@@ -671,7 +694,7 @@ function renderSide() {
     title.textContent = "Міста";
     items = cities.slice(0, 40).map(c => ({ name: c, s: summarize(byCity[c]), city: c }));
   }
-  if (!items.length) rows.innerHTML = `<li><p class="empty">Для цього міста немає меж районів в OpenStreetMap.</p></li>`;
+  title.parentElement.hidden = !items.length;   // a city without districts simply has no list
   for (const it of items) {
     const li = document.createElement("li"), btn = document.createElement("button");
     btn.type = "button";
@@ -728,6 +751,8 @@ function highlightDistrict() {
   map.getLayer("district-sel") && map.setFilter("district-sel", ["==", ["get", "id"], selDistrict ?? -1]);
 }
 
+const PIE_MAX_ZOOM = 9;   // below: city pies; from here on: districts and houses
+
 // ---------- map ----------
 const map = new maplibregl.Map({
   container: "map", style: STYLE,
@@ -783,9 +808,10 @@ map.on("load", () => {
   const bIdx = style.layers.findIndex(l => l.id === "building");
   const firstLabel = style.layers[bIdx + 1]?.id;
 
-  map.addLayer({ id: "houses-fill", type: "fill", source: "houses",
+  // houses from city scale; further out the city pies stand in for them
+  map.addLayer({ id: "houses-fill", type: "fill", source: "houses", minzoom: PIE_MAX_ZOOM,
     paint: { "fill-color": color, "fill-opacity": ["match", ["get", "state"], "idle", 0.45, 0.82] } }, firstLabel);
-  map.addLayer({ id: "houses-line", type: "line", source: "houses",
+  map.addLayer({ id: "houses-line", type: "line", source: "houses", minzoom: PIE_MAX_ZOOM,
     paint: { "line-color": color, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.6, 12, 1.2, 14, 0.6, 17, 2] } }, firstLabel);
 
   // A dot appears only for a bot whose building is unknown, and only up close.
@@ -836,6 +862,73 @@ map.on("load", () => {
   loadBots();
   setInterval(loadBots, REFRESH_MS);
 });
+
+// ---------- city pies (zoomed out to region or country) ----------
+
+const pies = new Map();   // city -> { marker, el, list }
+function renderPies() {
+  const byCity = {};
+  for (const b of channels()) if (b.city !== "Інше") (byCity[b.city] ||= []).push(b);
+  for (const [city, pie] of pies) if (!byCity[city]) { pie.marker.remove(); pies.delete(city); }
+  for (const [city, list] of Object.entries(byCity)) {
+    const s = summarize(list);
+    if (!s.total) continue;
+    // centre on the median bot so a stray far point doesn't drag the pie away
+    const mid = a => a.sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    const at = [mid(list.map(b => b.lng)), mid(list.map(b => b.lat))];
+    const size = Math.round(Math.min(44, 10 + Math.sqrt(s.total) * 2.2));
+    let pie = pies.get(city);
+    if (!pie) {
+      const el = document.createElement("div");
+      el.className = "pie";
+      el.appendChild(document.createElement("span"));
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", city);
+      pie = { el, marker: new maplibregl.Marker({ element: el }).setLngLat(at).addTo(map) };
+      el.addEventListener("mouseenter", () => showPieCard(city));
+      el.addEventListener("mouseleave", () => { fadeOut(pieCard); pieCard = null; });
+      el.addEventListener("click", e => { e.stopPropagation(); fadeOut(pieCard); pieCard = null; setArea(city); });
+      pies.set(city, pie);
+    }
+    pie.list = list; pie.total = s.total;
+    pie.marker.setLngLat(at);
+    const on = s.on / s.total * 100, off = on + s.off / s.total * 100;
+    Object.assign(pie.el.style, { width: size + "px", height: size + "px", zIndex: String(size) });   // bigger cities sit on top
+    pie.el.firstChild.style.background = `conic-gradient(var(--on) 0 ${on}%, var(--off) ${on}% ${off}%, var(--idle) ${off}% 100%)`;
+  }
+  updatePies();
+}
+// Only places with enough bots get a pie: a pie of one bot is just a dot, and suburbs would bury their city.
+function updatePies() {
+  const z = map.getZoom();
+  map.getContainer().classList.toggle("pies-off", z >= PIE_MAX_ZOOM);
+  const min = z < 7 ? 8 : z < 8 ? 3 : 1;   // country: real towns only; closer in: every place
+  for (const pie of pies.values()) pie.el.classList.toggle("pie-hide", pie.total < min);
+}
+let pieCard = null;
+// City card: "Київ · 1553", then one row per status the city actually has. Tinted when every bot agrees.
+function pieCardHtml(city, s) {
+  // same words, "31% · 449" layout and shares as the panel: on/off out of bots with a status, "no data" out of all
+  const line = (state, label, n, of) => `<div class="pie-row"><span class="dot ${state}"></span><span>${label}</span><span class="n"><span class="cnt-n">${n}</span><span class="pct">${Math.round(n / of * 100)}%</span></span></div>`;
+  const rows = [["off", "Світла немає", s.off], ["on", "Світло є", s.on]].filter(r => r[2]).sort((a, b) => b[2] - a[2])
+    .map(r => line(...r, s.known));
+  if (s.idle) rows.push(line("idle", "Немає даних", s.idle, s.total));
+  const tint = !s.off && s.on ? "st-on" : !s.on && s.off ? "st-off" : "";
+  return { tint, html: `<div class="pop"><section class="pop-item ${tint}">
+    <div class="pop-state pie-head"><b>${esc(city)}</b><span>· ${s.total}</span></div>
+    ${rows.join("")}
+  </section></div>` };
+}
+function showPieCard(city) {
+  const pie = pies.get(city);
+  if (!pie) return;
+  const card = pieCardHtml(city, summarize(pie.list));
+  fadeOut(pieCard);
+  pieCard = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: pie.el.offsetWidth / 2 + 6, maxWidth: "260px", className: "hover-pop" })
+    .setLngLat(pie.marker.getLngLat()).setHTML(card.html).addTo(map);
+  if (card.tint) pieCard.addClassName(card.tint);
+}
+map.on("zoom", updatePies);
 
 let idleTimer;
 map.on("idle", () => { clearTimeout(idleTimer); idleTimer = setTimeout(matchBuildings, 50); });
