@@ -10,6 +10,7 @@
   :root {
     --bg: #0d0f12;
     --surface: #121418;
+    --glass: rgba(18, 20, 24, 0.74);
     --raise: #1a1d22;
     --line: #23262c;
     --fg: #e7e9ec;
@@ -21,6 +22,7 @@
     color-scheme: dark;
   }
   html, body { height: 100%; margin: 0; }
+  [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); overflow: hidden; }
   #map { position: absolute; inset: 0; }
   button, input, select { font: inherit; color: inherit; }
@@ -29,7 +31,8 @@
   .side {
     position: absolute; z-index: 5; top: 0; bottom: 0; left: 0;
     width: 320px; box-sizing: border-box; overflow-y: auto;
-    background: var(--surface); border-right: 1px solid var(--line);
+    background: var(--glass); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
+    border-right: 1px solid var(--line);
     padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-bottom, 0px));
     padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px;
     display: flex; flex-direction: column; gap: 16px;
@@ -44,10 +47,17 @@
   .field { width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border-radius: 6px; background: var(--raise); border: 1px solid transparent; }
   .field:focus { border-color: #3a3f47; outline: none; }
   .search { position: relative; }
+  .combo { position: relative; }
+  .combo .field { padding-right: 30px; }
+  .combo .chev { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; font-size: 11px; }
   .results { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 6; margin: 0; padding: 4px; list-style: none;
-    background: var(--raise); border: 1px solid var(--line); border-radius: 6px; max-height: 280px; overflow-y: auto; }
-  .results button { all: unset; box-sizing: border-box; display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
-  .results button:hover, .results button:focus-visible { background: #23272e; }
+    background: #1a1d22; border: 1px solid var(--line); border-radius: 6px; max-height: 300px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .results li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+  .results li > span:not(.dot):not(.cnt) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .results li .cnt { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .results li[aria-selected="true"], .results li:hover { background: #262a31; }
+  .results .none { color: var(--muted); cursor: default; }
+  .results .none:hover { background: none; }
 
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
   .dot.on { background: var(--on); } .dot.off { background: var(--off); } .dot.idle { background: var(--idle); }
@@ -73,13 +83,20 @@
   .row-top .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-top .p { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .rows .bar { height: 4px; }
-  .credit { margin: 0; font-size: 12px; color: var(--muted); }
-  .credit a, .sub a { color: var(--fg); text-decoration: underline; text-decoration-color: #4a4f58; text-underline-offset: 2px; }
-  .credit a:hover, .sub a:hover { text-decoration-color: currentColor; }
+  .sub a { color: var(--fg); text-decoration: underline; text-decoration-color: #4a4f58; text-underline-offset: 2px; }
+  .sub a:hover { text-decoration-color: currentColor; }
   .empty { margin: 0; color: var(--muted); font-size: 13px; }
 
-  .show { position: absolute; z-index: 5; top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
-    width: 36px; height: 36px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--fg); }
+  /* collapsed panel: a small card with the headline numbers */
+  .mini { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; z-index: 5;
+    top: calc(12px + env(safe-area-inset-top, 0px)); left: calc(12px + env(safe-area-inset-left, 0px));
+    width: 240px; padding: 12px 14px; display: grid; gap: 8px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--glass); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); }
+  .mini:hover { border-color: #363a42; }
+  .mini-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .mini-city { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mini-off { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mini-off small { font-size: 12px; font-weight: 400; color: var(--muted); }
 
   .maplibregl-popup-content { background: var(--raise); color: var(--fg); border-radius: 8px; padding: 10px 12px; font: 13px/1.45 var(--font); box-shadow: 0 6px 20px rgba(0,0,0,.45); }
   .maplibregl-popup-tip { border-top-color: var(--raise) !important; border-bottom-color: var(--raise) !important; }
@@ -91,20 +108,24 @@
   .maplibregl-ctrl-group { background: var(--surface); border: 1px solid var(--line); box-shadow: none !important; }
   .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
   .maplibregl-ctrl-icon { filter: invert(1) brightness(.85); }
-  .maplibregl-ctrl-attrib { background: rgba(13,15,18,.7) !important; color: var(--muted); }
+  .maplibregl-ctrl-attrib { background: rgba(13,15,18,.7) !important; color: var(--muted); font-size: 11px; max-width: calc(100vw - 344px); border-radius: 6px 0 0 0; }
   .maplibregl-ctrl-attrib a { color: var(--muted); }
 
   @media (max-width: 560px) {
     .side { top: auto; width: 100%; max-height: 65vh; border-right: 0; border-top: 1px solid var(--line); border-radius: 12px 12px 0 0;
       padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-    .show { top: auto; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+    .maplibregl-ctrl-attrib { max-width: calc(100vw - 24px); }
+    .mini { top: auto; bottom: calc(44px + env(safe-area-inset-bottom, 0px)); width: auto; right: calc(12px + env(safe-area-inset-right, 0px)); }
   }
 </style>
 </head>
 <body>
 <div id="map"></div>
 
-<button class="btn show" id="side-open" type="button" aria-label="Показати панель" hidden>☰</button>
+<button class="mini" id="mini" type="button" aria-label="Розгорнути панель" hidden>
+  <span class="mini-top"><span class="mini-city" id="m-city">—</span><span class="mini-off"><span id="m-off">—</span> <small>без світла</small></span></span>
+  <span class="bar" id="m-bar"></span>
+</button>
 <aside class="side" id="side" aria-label="Світлокарта">
   <header class="head">
     <div>
@@ -112,15 +133,19 @@
       <p class="sub">Дані <a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобота</a> · <span id="updated">Завантаження…</span></p>
     </div>
     <button class="btn" id="refresh" type="button" aria-label="Оновити дані" title="Оновити">↻</button>
-    <button class="btn" id="side-close" type="button" aria-label="Сховати панель" title="Сховати">✕</button>
+    <button class="btn" id="side-close" type="button" aria-label="Згорнути панель" title="Згорнути">–</button>
   </header>
 
-  <div class="search">
-    <input class="field" id="q" type="search" placeholder="Пошук адреси" autocomplete="off" aria-label="Пошук адреси чи бота">
-    <ul class="results" id="results" hidden></ul>
+  <div class="combo">
+    <input class="field" id="area" type="text" role="combobox" aria-expanded="false" aria-controls="area-list" aria-label="Місто" placeholder="Місто" autocomplete="off" spellcheck="false">
+    <span class="chev" aria-hidden="true">▾</span>
+    <ul class="results" id="area-list" role="listbox" hidden></ul>
   </div>
 
-  <select class="field" id="area" aria-label="Місто"></select>
+  <div class="combo">
+    <input class="field" id="q" type="search" role="combobox" aria-expanded="false" aria-controls="results" placeholder="Пошук адреси" autocomplete="off" spellcheck="false" aria-label="Пошук адреси чи бота">
+    <ul class="results" id="results" role="listbox" hidden></ul>
+  </div>
 
   <section class="summary" aria-live="polite">
     <p class="headline"><span id="a-off">—</span> <small>без світла</small></p>
@@ -133,8 +158,6 @@
       <div><dt>Найдовше відключення</dt><dd id="a-max">—</dd></div>
     </dl>
   </section>
-
-  <p class="credit">Дані про світло — <a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобот</a>: сервіс, що стежить за електрикою в будинках і сповіщає про відключення в Telegram. Карта: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>.</p>
 
   <section class="list">
     <h2 id="list-title">Райони</h2>
@@ -385,16 +408,17 @@ function renderSide() {
   const cities = Object.keys(byCity).filter(c => c !== "Інше").sort((a, b) => byCity[b].length - byCity[a].length);
   if (area && !byCity[area]) area = null;
 
-  const sel = document.getElementById("area");
-  sel.innerHTML = `<option value="">Уся Україна · ${all.length}</option>` +
-    cities.map(c => `<option value="${esc(c)}">${esc(c)} · ${byCity[c].length}</option>`).join("");
-  sel.value = area ?? "";
+  cityOptions = [{ value: "", label: "Уся Україна", count: all.length }, ...cities.map(c => ({ value: c, label: c, count: byCity[c].length }))];
+  if (document.activeElement !== areaInput) areaInput.value = area ?? "Уся Україна";
 
   const scopeBots = area ? byCity[area] : all;
   const s = summarize(scopeBots);
   const p = pctOff(s);
   document.getElementById("a-off").textContent = p == null ? "—" : p + "%";
   document.getElementById("a-bar").innerHTML = barHtml(s);
+  document.getElementById("m-city").textContent = area ?? "Уся Україна";
+  document.getElementById("m-off").textContent = p == null ? "—" : p + "%";
+  document.getElementById("m-bar").innerHTML = barHtml(s);
   document.getElementById("a-on-n").textContent = s.on;
   document.getElementById("a-off-n").textContent = s.off;
   document.getElementById("a-idle-n").textContent = s.idle;
@@ -430,13 +454,25 @@ function renderSide() {
   }
 }
 
+// Padding so fitted areas are centred in the part of the map the panel doesn't cover.
+function viewPadding(base = 40) {
+  const pad = { top: base, right: base, bottom: base, left: base };
+  const side = document.getElementById("side"), mini = document.getElementById("mini");
+  const phone = matchMedia("(max-width: 560px)").matches;
+  const el = side.hidden ? mini : side;
+  if (phone) pad.bottom += el.offsetHeight + (side.hidden ? 44 : 0);
+  else if (!side.hidden) pad.left += side.offsetWidth;
+  else pad.top += mini.offsetHeight + 12;
+  return pad;
+}
+
 function fitBots(list) {
   if (!list?.length) return;
   // trim stray outliers so one mislocated bot doesn't zoom out to the whole country
   const xs = list.map(b => b.lng).sort((a, b) => a - b), ys = list.map(b => b.lat).sort((a, b) => a - b);
   const q = (a, f) => a[Math.min(a.length - 1, Math.max(0, Math.round(f * (a.length - 1))))];
   const t = list.length > 20 ? 0.02 : 0;
-  map.fitBounds([[q(xs, t), q(ys, t)], [q(xs, 1 - t), q(ys, 1 - t)]], { padding: 60, maxZoom: 15 });
+  map.fitBounds([[q(xs, t), q(ys, t)], [q(xs, 1 - t), q(ys, 1 - t)]], { padding: viewPadding(60), maxZoom: 15 });
 }
 function setArea(city) {
   area = city || null; selDistrict = null;
@@ -444,12 +480,12 @@ function setArea(city) {
   highlightDistrict();
   renderSide();
   if (area) fitBots(channels().filter(b => b.city === area));
-  else map.flyTo({ center: [31.2, 48.6], zoom: 5.6 });
+  else map.fitBounds([[22.1, 44.4], [40.2, 52.4]], { padding: viewPadding(20) });
 }
 function selectDistrict(d) {
   selDistrict = selDistrict === d.id ? null : d.id;
   highlightDistrict();
-  if (selDistrict != null) map.fitBounds([[d.bbox[0], d.bbox[1]], [d.bbox[2], d.bbox[3]]], { padding: 40 });
+  if (selDistrict != null) map.fitBounds([[d.bbox[0], d.bbox[1]], [d.bbox[2], d.bbox[3]]], { padding: viewPadding(40) });
 }
 function highlightDistrict() {
   map.getLayer("district-sel") && map.setFilter("district-sel", ["==", ["get", "id"], selDistrict ?? -1]);
@@ -458,8 +494,10 @@ function highlightDistrict() {
 // ---------- map ----------
 const map = new maplibregl.Map({
   container: "map", style: STYLE,
-  center: [30.523, 50.450], zoom: 13.5, maxZoom: 19, attributionControl: { compact: true, customAttribution: '<a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобот</a>' },
+  center: [30.523, 50.450], zoom: 13.5, maxZoom: 19, attributionControl: false,
 });
+map.addControl(new maplibregl.AttributionControl({ compact: false,
+  customAttribution: 'Дані про світло: <a href="https://svitlobot.in.ua" target="_blank" rel="noopener">Світлобот</a>' }), "bottom-right");
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: false }), "top-right");
 
@@ -530,14 +568,13 @@ let idleTimer;
 map.on("idle", () => { clearTimeout(idleTimer); idleTimer = setTimeout(matchBuildings, 50); });
 
 // ---------- UI ----------
-document.getElementById("area").onchange = e => setArea(e.target.value);
 function setSide(open) {
   document.getElementById("side").hidden = !open;
-  document.getElementById("side-open").hidden = open;
+  document.getElementById("mini").hidden = open;
   try { localStorage.setItem("svitlo-side", open ? "1" : "0"); } catch {}
 }
 document.getElementById("side-close").onclick = () => setSide(false);
-document.getElementById("side-open").onclick = () => setSide(true);
+document.getElementById("mini").onclick = () => setSide(true);
 {
   let open = !matchMedia("(max-width: 560px)").matches;
   try { const v = localStorage.getItem("svitlo-side"); if (v) open = v === "1"; } catch {}
@@ -545,32 +582,77 @@ document.getElementById("side-open").onclick = () => setSide(true);
 }
 document.getElementById("refresh").onclick = loadBots;
 
-const q = document.getElementById("q"), results = document.getElementById("results");
-q.addEventListener("input", () => {
-  const s = q.value.trim().toLowerCase();
-  results.innerHTML = "";
-  if (s.length < 2) { results.hidden = true; return; }
-  const seen = new Set();
-  const found = bots.filter(b => {
-    if (seen.has(b.link)) return false;
-    const hit = b.title.toLowerCase().includes(s) || b.link.toLowerCase().includes(s);
-    if (hit) seen.add(b.link);
-    return hit;
-  }).slice(0, 12);
-  for (const bot of found) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.innerHTML = `<span class="dot ${bot.state}"></span><span>${esc(bot.title)}</span>`;
-    btn.onclick = () => {
-      results.hidden = true; q.value = bot.title;
-      map.flyTo({ center: [bot.lng, bot.lat], zoom: 17 });
-      map.once("moveend", () => new maplibregl.Popup({ maxWidth: "280px" }).setLngLat([bot.lng, bot.lat]).setHTML(popupHtml(bot)).addTo(map));
-    };
-    li.appendChild(btn); results.appendChild(li);
-  }
-  results.hidden = !found.length;
+// Typeahead list under an input: arrows move, Enter picks, Esc closes.
+function combobox(input, list, { getItems, onPick, onClose }) {
+  let items = [], active = -1;
+  const open = () => {
+    items = getItems(input.value.trim().toLowerCase());
+    active = items.length ? 0 : -1;
+    list.innerHTML = "";
+    if (!items.length && input.value.trim().length < 2) { close(); return; }
+    if (!items.length) list.innerHTML = '<li class="none">Нічого не знайдено</li>';
+    items.forEach((it, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.innerHTML = it.html;
+      li.onmousedown = e => { e.preventDefault(); pick(i); };
+      list.appendChild(li);
+    });
+    mark();
+    list.hidden = false; input.setAttribute("aria-expanded", "true");
+  };
+  const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); };
+  const mark = () => [...list.children].forEach((li, i) => {
+    li.setAttribute("aria-selected", String(i === active));
+    if (i === active) li.scrollIntoView({ block: "nearest" });
+  });
+  const pick = i => { if (!items[i]) return; close(); onPick(items[i]); };
+  input.addEventListener("input", open);
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (list.hidden) return open();
+      if (!items.length) return;
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length; mark();
+    } else if (e.key === "Enter") { e.preventDefault(); pick(active); }
+    else if (e.key === "Escape") { close(); input.blur(); }
+  });
+  input.addEventListener("blur", () => { close(); onClose?.(); });
+  return { open };
+}
+
+// City picker: shows every city on focus, filters as you type.
+const areaInput = document.getElementById("area");
+let cityOptions = [];
+const cityBox = combobox(areaInput, document.getElementById("area-list"), {
+  getItems: s => cityOptions
+    .filter(o => !s || o.label.toLowerCase().includes(s))
+    .slice(0, 80)
+    .map(o => ({ ...o, html: `<span>${esc(o.label)}</span><span class="cnt">${o.count}</span>` })),
+  onPick: o => { areaInput.value = o.label; areaInput.blur(); setArea(o.value); },
+  onClose: () => { areaInput.value = area ?? "Уся Україна"; },
 });
-document.addEventListener("click", e => { if (!e.target.closest(".search")) results.hidden = true; });
+areaInput.addEventListener("focus", () => { areaInput.select(); areaInput.value = ""; cityBox.open(); });
+
+// Address search across all bots.
+const q = document.getElementById("q");
+combobox(q, document.getElementById("results"), {
+  getItems: s => {
+    if (s.length < 2) return [];
+    const seen = new Set();
+    return bots.filter(b => {
+      if (seen.has(b.link)) return false;
+      const hit = b.title.toLowerCase().includes(s) || b.link.toLowerCase().includes(s);
+      if (hit) seen.add(b.link);
+      return hit;
+    }).slice(0, 15).map(bot => ({ bot, html: `<span class="dot ${bot.state}"></span><span>${esc(bot.title)}</span>` }));
+  },
+  onPick: ({ bot }) => {
+    q.value = bot.title; q.blur();
+    map.flyTo({ center: [bot.lng, bot.lat], zoom: 17, padding: viewPadding(0) });
+    map.once("moveend", () => new maplibregl.Popup({ maxWidth: "280px" }).setLngLat([bot.lng, bot.lat]).setHTML(popupHtml(bot)).addTo(map));
+  },
+});
 </script>
 </body>
 </html>
