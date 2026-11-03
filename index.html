@@ -4,12 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Світлокарта будинків</title>
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Світлокарта">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%233ddc84'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
   /* Layout: full-screen map; one glass panel on the left that morphs into a floating card (bottom sheet on phones) */
   :root {
-    --bg: #0d0f12;
+    --bg: #0c0c0c;   /* same as the map's own background, so any strip the browser paints blends in */
     --glass: rgba(20, 22, 27, 0.72);
     --glass-strong: rgba(24, 26, 32, 0.88);
     --blur: blur(18px) saturate(1.3);
@@ -27,9 +32,13 @@
     color-scheme: dark;
   }
   html, body { height: 100%; margin: 0; }
+  html { background: var(--bg); overflow: hidden; overscroll-behavior: none; }
+  /* The controls live in the visible area (dynamic viewport); the map alone fills the large viewport,
+     so on iOS 26 Safari it keeps going under the floating address and tab bars, which blur it natively. */
+  body { position: relative; height: 100dvh; overscroll-behavior: none; }
   [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
-  #map { position: absolute; inset: 0; }
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; }
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid rgba(255, 255, 255, 0.28); outline-offset: 1px; }
 
@@ -679,7 +688,9 @@ function renderSide() {
 
 // Padding so fitted areas are centred in the part of the map the panel doesn't cover.
 function viewPadding(base = 40) {
-  const pad = { top: base, right: base, bottom: base, left: base };
+  // part of the map that runs under the browser's bottom bar (large viewport taller than the visible one)
+  const underBars = Math.max(0, document.getElementById("map").clientHeight - document.body.clientHeight);
+  const pad = { top: base, right: base, bottom: base + underBars, left: base };
   const side = document.getElementById("side");
   const collapsed = side.classList.contains("collapsed");
   const miniH = parseFloat(side.style.getPropertyValue("--mini-h")) || 120;
