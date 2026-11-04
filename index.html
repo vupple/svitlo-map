@@ -93,8 +93,11 @@ if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) {
   .field {
     width: 100%; height: 36px; box-sizing: border-box; padding: 0 34px 0 36px; border-radius: 10px;
     background: var(--field); border: 1px solid transparent; outline: none; font-size: 14px;
-    transition: background .2s, border-color .2s;
+    transition: background .2s, border-color .2s; -webkit-appearance: none; appearance: none;
   }
+  .field::-webkit-search-cancel-button, .field::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+  /* iOS zooms the whole page into any field with text under 16px; at 16px it leaves the scale alone */
+  @media (pointer: coarse) { .field { font-size: 16px; } }
   .field::placeholder { color: var(--muted); }
   .field:hover { background: var(--field-hover); }
   .field:focus { background: var(--field-hover); border-color: rgba(255, 255, 255, 0.16); }
@@ -263,7 +266,7 @@ if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) {
   <div class="row">
     <div class="combo">
       <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
-      <input class="field" id="q" type="text" role="combobox" aria-expanded="false" aria-controls="results" placeholder="Місто або адреса" autocomplete="off" spellcheck="false" aria-label="Місто або адреса">
+      <input class="field" id="q" type="search" enterkeyhint="search" autocorrect="off" role="combobox" aria-expanded="false" aria-controls="results" placeholder="Місто або адреса" autocomplete="off" spellcheck="false" aria-label="Місто або адреса">
       <ul class="results" id="results" role="listbox" hidden></ul>
     </div>
     <button class="btn" id="toggle" type="button" aria-label="Згорнути панель" aria-expanded="true"><svg class="i-expand" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg><svg class="i-shrink" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5h-4v-4M9.5 6.5l4-4M2.5 9.5h4v4M6.5 9.5l-4 4"/></svg></button>
