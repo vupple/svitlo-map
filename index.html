@@ -1086,7 +1086,7 @@ function combobox(input, list, { getItems, onPick, onClose }) {
       do active = (active + step + items.length) % items.length; while (items[active].header);
       mark();
     } else if (e.key === "Enter") { e.preventDefault(); pick(active); }
-    else if (e.key === "Escape") { close(); onClose?.(); input.blur(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); onClose?.(); input.blur(); }
   });
   input.addEventListener("blur", () => { close(); onClose?.(); });
   return { open };
