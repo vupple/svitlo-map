@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Світлокарта будинків</title>
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0c0c0c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -29,6 +32,7 @@
     --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
     --panel-w: 320px;
+    --sheet: #15171b;   /* opaque phone sheet */
     color-scheme: dark;
   }
   html, body { height: 100%; margin: 0; }
@@ -208,14 +212,18 @@
   .attrib a:hover { color: var(--fg); }
 
   @media (max-width: 560px) {
-    .side { top: auto; bottom: calc(40px + env(safe-area-inset-bottom, 0px));
-      width: calc(100% - 2 * var(--gap) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-      height: calc(100% - 52px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); padding-top: 0; }
+    /* Phones: the sheet is docked to the bottom edge and opaque, so Safari tints its own bar area
+       with the same colour and the sheet runs into it seamlessly; in the home-screen app it sits over the home indicator. */
+    .side { position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: auto;
+      height: calc(100dvh - 52px - env(safe-area-inset-top, 0px)); padding: 0 calc(16px + env(safe-area-inset-right, 0px))
+      calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+      background: var(--sheet); border: 0; border-top: 1px solid var(--line); border-radius: 20px 20px 0 0;
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4); }
     .grab { display: flex; justify-content: center; flex: none; margin: 0 -16px -10px; padding: 8px 0 6px; cursor: grab; touch-action: none; }
     .grab span { width: 36px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.28); }
     #toggle { display: none; }
     .side.collapsed .results { top: auto; bottom: calc(100% + 6px); transform-origin: bottom center; }
-    .attrib { font-size: 10px; right: 50%; translate: 50% 0; }
+    .attrib { font-size: 10px; right: 50%; translate: 50% 0; bottom: calc(var(--mini-h, 120px) + 8px); }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
@@ -721,7 +729,7 @@ function viewPadding(base = 40) {
   const side = document.getElementById("side");
   const collapsed = side.classList.contains("collapsed");
   const miniH = parseFloat(side.style.getPropertyValue("--mini-h")) || 120;
-  if (matchMedia("(max-width: 560px)").matches) pad.bottom += miniH + 40;   // on phones the map is shown with the sheet compact
+  if (matchMedia("(max-width: 560px)").matches) pad.bottom += miniH + 20;   // on phones the map is shown with the sheet compact
   else if (collapsed) pad.top += miniH + 12;
   else pad.left += side.offsetWidth + 12;
   return pad;
@@ -948,7 +956,10 @@ map.on("idle", () => { clearTimeout(idleTimer); idleTimer = setTimeout(matchBuil
 const side = document.getElementById("side");
 function measureMini() {
   const sum = document.getElementById("summary");
-  side.style.setProperty("--mini-h", sum.offsetTop + sum.offsetHeight + 16 + "px");
+  // the bottom padding also covers the home indicator on a docked phone sheet
+  const h = sum.offsetTop + sum.offsetHeight + parseFloat(getComputedStyle(side).paddingBottom) + "px";
+  side.style.setProperty("--mini-h", h);
+  document.documentElement.style.setProperty("--mini-h", h);
 }
 function setSide(open) {
   if (!open) { measureMini(); side.scrollTop = 0; }
@@ -965,10 +976,11 @@ document.getElementById("toggle").onclick = () => setSide(side.classList.contain
 {
   const grab = document.getElementById("grab");
   let drag = null;
+  const safeTop = () => document.querySelector(".map-ctrl").getBoundingClientRect().top - 12;   // status bar height
   const start = (y, t) => {
     if (side.classList.contains("collapsed")) measureMini();
     const mini = parseFloat(side.style.getPropertyValue("--mini-h"));
-    drag = { y, t, lastY: y, lastT: t, v: 0, h: side.offsetHeight, mini, full: Math.max(mini, innerHeight - 52), moved: false };
+    drag = { y, t, lastY: y, lastT: t, v: 0, h: side.offsetHeight, mini, full: Math.max(mini, innerHeight - 52 - safeTop()), moved: false };
   };
   const move = (y, t) => {
     const dy = y - drag.y;
