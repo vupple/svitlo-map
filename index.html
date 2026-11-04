@@ -182,6 +182,7 @@
     display: grid; place-items: center; color: var(--muted); font-size: 15px; line-height: 1; z-index: 1; }
   .pop-x:hover { background: var(--field-hover); color: var(--fg); }
   .hover-pop .pop-x { display: none; }
+  @media (pointer: coarse) { .pop-x { width: 30px; height: 30px; top: 2px; right: 2px; font-size: 18px; } .pop-item:first-of-type .pop-state { margin-right: 28px; } }
 
   @keyframes pop-in { from { opacity: 0; transform: scale(.94) translateY(4px); } to { opacity: 1; transform: none; } }
   @keyframes pop-out { to { opacity: 0; transform: scale(.97); } }
@@ -562,6 +563,9 @@ const groupKey = g => g.map(b => b.key).sort().join("|");
 
 // Hover shows a card that fades away; a click pins one until it is closed.
 let hover = null, pinned = null;
+// Whether the last pointer was a finger: browsers fake mouse moves after a tap, which would open a hover card.
+let touchInput = false;
+for (const ev of ["pointerdown", "pointermove"]) addEventListener(ev, e => { touchInput = e.pointerType === "touch"; }, { capture: true, passive: true });
 function fadeOut(popup) {
   if (!popup) return;
   popup.getElement()?.classList.add("leaving");
@@ -822,6 +826,7 @@ map.on("load", () => {
   // Hover and click use a forgiving hit area, so small or intricate buildings are easy to reach.
   let moveFrame = 0, lastMove = null;
   map.on("mousemove", e => {
+    if (touchInput) return;   // a finger has no hover: on touch screens only a tap opens a card
     lastMove = e;
     if (moveFrame) return;
     moveFrame = requestAnimationFrame(() => {
@@ -837,6 +842,9 @@ map.on("load", () => {
     const group = pickGroup(e.point, hover?.group);
     if (group) pinPopup(group, hover?.key === groupKey(group) ? hover.getLngLat() : e.lngLat);
     else closePinned();   // a click on empty map closes the card and clears the search
+    // a click outside the selected district clears the selection
+    const d = selDistrict != null && DISTRICTS[selDistrict];
+    if (d && !inPolygon(e.lngLat.lng, e.lngLat.lat, d.rings)) { selDistrict = null; highlightDistrict(); renderSide(); }
   });
 
   // City district outlines, prepared by build_buildings.py so they stay visible at every zoom
@@ -849,8 +857,10 @@ map.on("load", () => {
              "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.6, 10, 1, 14, 2] } });
   map.addSource("district-polys", { type: "geojson", data: { type: "FeatureCollection",
     features: DISTRICTS.map(d => ({ type: "Feature", properties: { id: d.id }, geometry: { type: "Polygon", coordinates: d.rings } })) } });
-  map.addLayer({ id: "district-sel", type: "line", source: "district-polys", filter: ["==", ["get", "id"], -1],
-    paint: { "line-color": "#ffffff", "line-width": 3.5, "line-blur": 0.5 } });
+  // the selected outline fades out with the other districts when zooming out to region or country scale
+  map.addLayer({ id: "district-sel", type: "line", source: "district-polys", minzoom: 9, filter: ["==", ["get", "id"], -1],
+    paint: { "line-color": "#ffffff", "line-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0, 10, 1],
+             "line-width": 3.5, "line-blur": 0.5 } });
   const labelFont = style.layers.find(l => l.type === "symbol" && l.layout?.["text-font"])?.layout["text-font"] || ["Noto Sans Regular"];
   map.addSource("district-labels", { type: "geojson", data: { type: "FeatureCollection",
     features: PRE.districts.map(d => ({ type: "Feature", geometry: { type: "Point", coordinates: [d.lng, d.lat] }, properties: { name: d.name } })) } });
@@ -885,7 +895,7 @@ function renderPies() {
       el.setAttribute("role", "button");
       el.setAttribute("aria-label", city);
       pie = { el, marker: new maplibregl.Marker({ element: el }).setLngLat(at).addTo(map) };
-      el.addEventListener("mouseenter", () => showPieCard(city));
+      el.addEventListener("mouseenter", () => { if (!touchInput) showPieCard(city); });
       el.addEventListener("mouseleave", () => { fadeOut(pieCard); pieCard = null; });
       el.addEventListener("click", e => { e.stopPropagation(); fadeOut(pieCard); pieCard = null; setArea(city); });
       pies.set(city, pie);
