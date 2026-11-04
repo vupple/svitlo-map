@@ -2,13 +2,15 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Світлокарта будинків</title>
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0c0c0c">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <script>
+// Safari ignores user-scalable=no; its own pinch gesture events can still be cancelled. The map works from touch events, so it is unaffected.
+for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
 if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) {
   const root = document.documentElement;
   root.classList.add("app");
@@ -96,6 +98,8 @@ if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) {
     transition: background .2s, border-color .2s; -webkit-appearance: none; appearance: none;
   }
   .field::-webkit-search-cancel-button, .field::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+  /* the page itself never zooms (pinch or double tap); the map keeps its own gestures */
+  .side, .map-ctrl, .attrib, .maplibregl-popup { touch-action: pan-x pan-y; }
   /* iOS zooms the whole page into any field with text under 16px; at 16px it leaves the scale alone */
   @media (pointer: coarse) { .field { font-size: 16px; } }
   .field::placeholder { color: var(--muted); }
