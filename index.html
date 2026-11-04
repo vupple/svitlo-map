@@ -32,17 +32,19 @@
     --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
     --panel-w: 320px;
-    --sheet: #15171b;   /* opaque phone sheet */
+    --sheet: #131417;   /* opaque phone sheet */
     color-scheme: dark;
   }
   html, body { height: 100%; margin: 0; }
   html { background: var(--bg); overflow: hidden; overscroll-behavior: none; }
   /* The controls live in the visible area (dynamic viewport); the map alone fills the large viewport,
      so on iOS 26 Safari it keeps going under the floating address and tab bars, which blur it natively. */
-  body { position: relative; height: 100dvh; overscroll-behavior: none; }
+  /* --app-gap: iOS home-screen apps with a translucent status bar get a viewport that stops short of the screen bottom
+     by the status bar height; the page is stretched by that much so nothing ends above the home indicator (see fitScreen) */
+  body { position: relative; height: calc(100dvh + var(--app-gap, 0px)); overscroll-behavior: none; }
   [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
-  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; }
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: calc(100lvh + var(--app-gap, 0px)); }
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid rgba(255, 255, 255, 0.28); outline-offset: 1px; }
 
@@ -214,8 +216,9 @@
   @media (max-width: 560px) {
     /* Phones: the sheet is docked to the bottom edge and opaque, so Safari tints its own bar area
        with the same colour and the sheet runs into it seamlessly; in the home-screen app it sits over the home indicator. */
-    .side { position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: auto;
-      height: calc(100dvh - 52px - env(safe-area-inset-top, 0px)); padding: 0 calc(16px + env(safe-area-inset-right, 0px))
+    html { background: var(--sheet); }   /* Safari paints its bottom bar area with the page colour */
+    .side { top: auto; left: 0; right: 0; bottom: 0; width: auto;
+      height: calc(100% - 52px - env(safe-area-inset-top, 0px)); padding: 0 calc(16px + env(safe-area-inset-right, 0px))
       calc(16px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
       background: var(--sheet); border: 0; border-top: 1px solid var(--line); border-radius: 20px 20px 0 0;
       box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4); }
@@ -952,6 +955,15 @@ let idleTimer;
 map.on("idle", () => { clearTimeout(idleTimer); idleTimer = setTimeout(matchBuildings, 50); });
 
 // ---------- UI ----------
+// Home-screen app on iOS: stretch the page down to the real screen bottom if the viewport stops short of it.
+function fitScreen() {
+  const app = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  const screenH = innerHeight > innerWidth ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+  const gap = app ? Math.min(80, Math.max(0, screenH - innerHeight)) : 0;
+  document.documentElement.style.setProperty("--app-gap", gap + "px");
+}
+fitScreen();
+addEventListener("resize", () => { fitScreen(); map.resize(); });
 // Collapsed panel keeps its top part (city + headline) in place and shrinks around it.
 const side = document.getElementById("side");
 function measureMini() {
@@ -980,7 +992,7 @@ document.getElementById("toggle").onclick = () => setSide(side.classList.contain
   const start = (y, t) => {
     if (side.classList.contains("collapsed")) measureMini();
     const mini = parseFloat(side.style.getPropertyValue("--mini-h"));
-    drag = { y, t, lastY: y, lastT: t, v: 0, h: side.offsetHeight, mini, full: Math.max(mini, innerHeight - 52 - safeTop()), moved: false };
+    drag = { y, t, lastY: y, lastT: t, v: 0, h: side.offsetHeight, mini, full: Math.max(mini, document.body.clientHeight - 52 - safeTop()), moved: false };
   };
   const move = (y, t) => {
     const dy = y - drag.y;
