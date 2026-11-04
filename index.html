@@ -39,12 +39,13 @@
   html { background: var(--bg); overflow: hidden; overscroll-behavior: none; }
   /* The controls live in the visible area (dynamic viewport); the map alone fills the large viewport,
      so on iOS 26 Safari it keeps going under the floating address and tab bars, which blur it natively. */
-  /* --app-gap: iOS home-screen apps with a translucent status bar get a viewport that stops short of the screen bottom
-     by the status bar height; the page is stretched by that much so nothing ends above the home indicator (see fitScreen) */
-  body { position: relative; height: calc(100dvh + var(--app-gap, 0px)); overscroll-behavior: none; }
+  body { position: relative; height: 100dvh; overscroll-behavior: none; }
   [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
-  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: calc(100lvh + var(--app-gap, 0px)); }
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; }
+  /* iOS home-screen app with a translucent status bar: fixed elements stop short of the screen bottom by the status bar
+     height, while 100dvh is the full screen, so there the map is laid out in the page like the sheet */
+  @media (display-mode: standalone) { #map { position: absolute; height: 100%; } }
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid rgba(255, 255, 255, 0.28); outline-offset: 1px; }
 
@@ -955,15 +956,6 @@ let idleTimer;
 map.on("idle", () => { clearTimeout(idleTimer); idleTimer = setTimeout(matchBuildings, 50); });
 
 // ---------- UI ----------
-// Home-screen app on iOS: stretch the page down to the real screen bottom if the viewport stops short of it.
-function fitScreen() {
-  const app = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
-  const screenH = innerHeight > innerWidth ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-  const gap = app ? Math.min(80, Math.max(0, screenH - innerHeight)) : 0;
-  document.documentElement.style.setProperty("--app-gap", gap + "px");
-}
-fitScreen();
-addEventListener("resize", () => { fitScreen(); map.resize(); });
 // Collapsed panel keeps its top part (city + headline) in place and shrinks around it.
 const side = document.getElementById("side");
 function measureMini() {
