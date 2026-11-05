@@ -52,7 +52,7 @@ if (navigator.standalone || matchMedia("(display-mode: standalone)").matches) {
   body { position: relative; height: 100dvh; overscroll-behavior: none; }
   [hidden] { display: none !important; }
   body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
-  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; }
+  #map { position: fixed; z-index: 0; top: 0; left: 0; width: 100%; height: 100vh; height: 100lvh; }
   /* iOS home-screen app with a translucent status bar: the page is drawn from the very top of the screen, but its viewport
      units and fixed positioning stop short of the bottom. There the page takes the screen's own height (--app-h). */
   html.app body { height: var(--app-h, 100dvh); }
